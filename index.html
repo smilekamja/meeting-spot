@@ -331,6 +331,11 @@ function hideForm() {
 function doSearch(kw) {
   const el = document.getElementById('sr');
   if (!kw.trim()) { el.classList.remove('on'); return; }
+  if (!ps) {
+    el.innerHTML = '<div class="sri" style="color:#8e8e93">지도 로딩 중... 잠시 후 다시 시도해주세요</div>';
+    el.classList.add('on');
+    return;
+  }
   ps.keywordSearch(kw, (data, status) => {
     el.innerHTML = '';
     if (status !== kakao.maps.services.Status.OK || !data.length) {
