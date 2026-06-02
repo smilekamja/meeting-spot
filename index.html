@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>중간 약속장소 찾기</title>
+  <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=2075bbdc94c0ff77ec341ffa77001023&libraries=services"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;background:#f5f5f7;color:#1d1d1f;min-height:100vh}
+    header{background:#fff;border-bottom:1px solid #e0e0e0;padding:14px 24px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100}
+    header h1{font-size:18px;font-weight:700}
+    .badge{font-size:11px;background:#0071e3;color:#fff;padding:2px 8px;border-radius:20px}
+    .layout{display:grid;grid-template-columns:370px 1fr;height:calc(100vh - 53px)}
+    .sidebar{background:#fff;border-right:1px solid #e0e0e0;overflow-y:auto;display:flex;flex-direction:column}
+    .sec{padding:16px 18px;border-bottom:1px solid #f0f0f0}
+    .sec h2{font-size:10px;font-weight:700;color:#8e8e93;letter-spacing:.8px;text-transform:uppercase;margin-bottom:10px}
+    input[type=text]{padding:9px 12px;border:1px solid #d2d2d7;border-radius:8px;font-size:13px;width:100%;font-family:inherit}
+    input:focus{outline:none;border-color:#0071e3;box-shadow:0 0 0 3px rgba(0,113,227,.15)}
+    .btn{padding:9px 16px;border-radius:8px;border:none;font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;font-family:inherit}
+    .btn:disabled{opacity:.35;cursor:not-allowed}
+    .btn-primary{background:#0071e3;color:#fff}
+    .btn-primary:hover:not(:disabled){background:#0077ed}
+    .btn-secondary{background:#f0f0f3;color:#1d1d1f}
+    .btn-secondary:hover{background:#e5e5ea}
+    .btn-sm{padding:7px 13px;font-size:12px}
+    .row{display:flex;gap:8px}
+    /* 참여자 */
+    .p-list{display:flex;flex-direction:column;gap:7px;margin-bottom:10px;min-height:20px}
+    .p-item{display:flex;align-items:center;gap:9px;background:#f5f5f7;border-radius:10px;padding:9px 12px}
+    .p-dot{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
+    .p-info{flex:1;min-width:0}
+    .p-name{font-size:13px;font-weight:600}
+    .p-loc{font-size:11px;color:#8e8e93;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .btn-x{background:none;border:none;color:#c7c7cc;cursor:pointer;font-size:18px;line-height:1;padding:2px 5px;flex-shrink:0}
+    .btn-x:hover{color:#ff3b30}
+    /* 폼 */
+    .add-form{display:flex;flex-direction:column;gap:8px;padding-top:4px}
+    .sr-wrap{position:relative}
+    .sr{background:#fff;border:1px solid #d2d2d7;border-radius:8px;max-height:168px;overflow-y:auto;display:none;box-shadow:0 4px 16px rgba(0,0,0,.1)}
+    .sr.on{display:block}
+    .sri{padding:9px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid #f5f5f7}
+    .sri:last-child{border-bottom:none}
+    .sri:hover{background:#f5f5f7}
+    .sri small{font-size:11px;color:#8e8e93;display:block}
+    /* 탐색 버튼 */
+    #btn-find{margin:14px 18px;width:calc(100% - 36px);padding:13px;font-size:15px}
+    /* 결과 */
+    .results-wrap{padding:0 18px 24px;flex:1}
+    .status{font-size:12px;color:#8e8e93;min-height:18px;margin-bottom:8px}
+    .rc{background:#f5f5f7;border-radius:12px;padding:14px 15px;margin-bottom:9px;cursor:pointer;border:2px solid transparent;transition:all .15s}
+    .rc:hover{background:#ebebed}
+    .rc.sel{border-color:#0071e3;background:#eaf2ff}
+    .r-rank{font-size:11px;font-weight:700;color:#0071e3;margin-bottom:3px}
+    .r-name{font-size:17px;font-weight:700;margin-bottom:6px}
+    .r-lines{display:flex;gap:4px;margin-bottom:9px;flex-wrap:wrap}
+    .lb{font-size:10px;font-weight:700;color:#fff;padding:2px 7px;border-radius:10px}
+    .r-stats{display:flex;gap:14px}
+    .stat{display:flex;flex-direction:column;gap:1px}
+    .stat-l{font-size:10px;color:#8e8e93}
+    .stat-v{font-size:13px;font-weight:700}
+    .r-detail{margin-top:10px;padding-top:10px;border-top:1px solid #d2d2d7;display:none}
+    .rc.sel .r-detail{display:block}
+    .dr{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:12px}
+    .dr-l{display:flex;align-items:center;gap:6px}
+    .dd{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+    .empty{text-align:center;padding:20px 0;color:#8e8e93;font-size:13px}
+    /* 지도 */
+    #map{width:100%;height:100%}
+    /* 카카오맵 오버레이 */
+    .p-marker{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+    .r-marker{border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;box-shadow:0 3px 10px rgba(0,0,0,.3);border:2.5px solid #fff}
+    @media(max-width:768px){
+      .layout{grid-template-columns:1fr;grid-template-rows:auto 320px;height:auto}
+      #map{height:320px}
+    }
+  </style>
+</head>
+<body>
+<header>
+  <span style="font-size:22px">🚇</span>
+  <h1>중간 약속장소 찾기</h1>
+  <span class="badge">지하철 기준</span>
+</header>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sec">
+      <h2>참여자</h2>
+      <div class="p-list" id="p-list"><div class="empty">아래 버튼으로 참여자를 추가하세요</div></div>
+      <div id="add-form" class="add-form" style="display:none">
+        <input type="text" id="p-name" placeholder="이름 (선택)" />
+        <div class="sr-wrap">
+          <input type="text" id="p-search" placeholder="출발지 검색 (장소, 주소, 역명)" autocomplete="off" />
+          <div class="sr" id="sr"></div>
+        </div>
+        <div class="row">
+          <button class="btn btn-primary btn-sm" id="btn-ok">추가</button>
+          <button class="btn btn-secondary btn-sm" id="btn-cancel">취소</button>
+        </div>
+      </div>
+      <button class="btn btn-secondary" id="btn-add" style="width:100%;margin-top:8px">+ 참여자 추가</button>
+    </div>
+    <button class="btn btn-primary" id="btn-find" disabled>🔍 최적 약속장소 찾기</button>
+    <div class="results-wrap">
+      <div class="status" id="status"></div>
+      <div id="results"></div>
+    </div>
+  </aside>
+  <div id="map"></div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+//  서울 지하철 노선도 데이터
+//  [역명, 위도, 경도, 이전역까지_분(첫역=없음)]
+// ══════════════════════════════════════════════════════
+const LINES = {
+  '1':[ ['도봉산',37.6893,127.0438],['도봉',37.6818,127.0438,2],['방학',37.6615,127.0437,3],['창동',37.6527,127.0477,2],['녹천',37.6430,127.0520,2],['월계',37.6350,127.0580,2],['광운대',37.6243,127.0564,2],['석계',37.6143,127.0658,2],['신이문',37.6070,127.0618,2],['외대앞',37.5966,127.0581,2],['회기',37.5897,127.0581,2],['청량리',37.5803,127.0478,2],['제기동',37.5752,127.0378,2],['신설동',37.5711,127.0258,2],['동묘앞',37.5712,127.0166,2],['동대문',37.5712,127.0096,2],['종로5가',37.5709,127.0022,2],['종로3가',37.5706,126.9918,2],['종각',37.5700,126.9825,2],['시청',37.5654,126.9772,2],['서울역',37.5547,126.9706,2],['남영',37.5385,126.9706,3],['용산',37.5296,126.9644,2],['노량진',37.5135,126.9426,4],['대방',37.5074,126.9317,2],['신길',37.5143,126.9219,2],['영등포',37.5159,126.9065,2],['신도림',37.5083,126.8911,2],['구로',37.5004,126.8849,3],['가산디지털단지',37.4814,126.8826,3],['독산',37.4729,126.8827,2],['금천구청',37.4572,126.8954,2] ],
+  '2':[ ['시청',37.5654,126.9772],['을지로입구',37.5657,126.9823,2],['을지로3가',37.5658,126.9921,2],['을지로4가',37.5657,126.9981,2],['동대문역사문화공원',37.5650,127.0096,2],['신당',37.5660,127.0188,2],['상왕십리',37.5618,127.0311,2],['왕십리',37.5614,127.0379,2],['한양대',37.5553,127.0449,2],['뚝섬',37.5472,127.0469,2],['성수',37.5445,127.0558,2],['건대입구',37.5401,127.0699,2],['구의',37.5378,127.0931,3],['강변',37.5344,127.0934,2],['잠실나루',37.5187,127.0853,3],['잠실',37.5133,127.1001,2],['잠실새내',37.5081,127.0878,2],['종합운동장',37.5110,127.0733,2],['삼성',37.5088,127.0632,2],['선릉',37.5047,127.0490,2],['역삼',37.5007,127.0362,2],['강남',37.4979,127.0276,2],['교대',37.4931,127.0139,2],['서초',37.4836,127.0124,3],['방배',37.4813,126.9976,2],['사당',37.4765,126.9815,2],['낙성대',37.4742,126.9654,3],['서울대입구',37.4808,126.9527,2],['봉천',37.4857,126.9427,2],['신림',37.4843,126.9296,2],['신대방',37.4877,126.9142,2],['구로디지털단지',37.4850,126.9013,2],['대림',37.4931,126.8945,3],['신도림',37.5083,126.8911,3],['문래',37.5178,126.8980,2],['영등포구청',37.5257,126.8962,2],['당산',37.5334,126.9000,2],['합정',37.5497,126.9143,3],['홍대입구',37.5573,126.9249,2],['신촌',37.5553,126.9368,2],['이대',37.5568,126.9464,2],['아현',37.5609,126.9572,2],['충정로',37.5598,126.9668,2] ],
+  '2_close': true, // 2호선 순환 처리
+  '3':[ ['대화',37.6734,126.7697],['주엽',37.6692,126.7787,3],['정발산',37.6666,126.7891,2],['마두',37.6591,126.7844,2],['백석',37.6536,126.7919,2],['대곡',37.6346,126.7724,4],['화정',37.6310,126.8277,4],['원당',37.6334,126.8524,3],['원흥',37.6299,126.8699,2],['삼송',37.6567,126.8800,4],['지축',37.6428,126.9215,4],['구파발',37.6380,126.9195,2],['연신내',37.6191,126.9200,3],['불광',37.6105,126.9296,2],['녹번',37.6017,126.9299,2],['홍제',37.5929,126.9412,2],['무악재',37.5861,126.9470,2],['독립문',37.5799,126.9589,2],['경복궁',37.5760,126.9747,2],['안국',37.5762,126.9851,2],['종로3가',37.5706,126.9918,2],['을지로3가',37.5658,126.9921,2],['충무로',37.5612,126.9944,2],['동대입구',37.5577,127.0011,2],['약수',37.5533,127.0082,2],['금호',37.5473,127.0136,2],['옥수',37.5412,127.0186,2],['압구정',37.5271,127.0282,3],['신사',37.5156,127.0201,2],['잠원',37.5136,127.0111,2],['고속터미널',37.5046,127.0047,2],['교대',37.4931,127.0139,3],['남부터미널',37.4845,127.0137,2],['양재',37.4847,127.0345,3],['매봉',37.4808,127.0454,2],['도곡',37.4900,127.0449,2],['대치',37.4948,127.0611,2],['학여울',37.4927,127.0743,2],['대청',37.4980,127.0895,2],['일원',37.4944,127.0982,2],['수서',37.4870,127.1026,2],['가락시장',37.4930,127.1174,3],['오금',37.5025,127.1318,3] ],
+  '4':[ ['당고개',37.6647,127.0898],['상계',37.6575,127.0729,2],['노원',37.6554,127.0564,2],['창동',37.6527,127.0477,2],['쌍문',37.6488,127.0307,3],['수유',37.6376,127.0253,2],['미아',37.6290,127.0281,2],['미아사거리',37.6213,127.0305,2],['길음',37.6035,127.0256,3],['성신여대입구',37.5928,127.0166,2],['한성대입구',37.5880,127.0065,2],['혜화',37.5826,127.0020,2],['동대문',37.5712,127.0096,3],['동대문역사문화공원',37.5650,127.0096,2],['충무로',37.5612,126.9944,2],['명동',37.5603,126.9827,2],['회현',37.5579,126.9774,2],['서울역',37.5547,126.9706,2],['숙대입구',37.5442,126.9718,2],['삼각지',37.5371,126.9720,2],['신용산',37.5300,126.9654,2],['이촌',37.5181,126.9639,3],['동작',37.5108,126.9813,4],['이수',37.4859,126.9819,4],['사당',37.4765,126.9815,2],['남태령',37.4592,126.9897,3],['선바위',37.4443,127.0034,3],['경마공원',37.4357,127.0134,2],['대공원',37.4286,127.0097,2],['과천',37.4254,126.9874,3],['정부과천청사',37.4282,126.9816,2],['인덕원',37.3943,126.9636,5],['평촌',37.3901,126.9526,2],['범계',37.3851,126.9534,2],['금정',37.3742,126.9334,3] ],
+  '5':[ ['방화',37.5716,126.8024],['개화산',37.5594,126.8119,3],['김포공항',37.5618,126.8015,2],['송정',37.5600,126.8215,3],['마곡',37.5600,126.8700,4],['발산',37.5556,126.8492,3],['우장산',37.5480,126.8469,2],['화곡',37.5440,126.8490,2],['까치산',37.5382,126.8627,2],['목동',37.5284,126.8749,3],['오목교',37.5234,126.8851,2],['양평',37.5248,126.8972,2],['영등포구청',37.5257,126.8962,2],['영등포시장',37.5213,126.9006,2],['신길',37.5143,126.9219,3],['여의도',37.5217,126.9243,2],['여의나루',37.5259,126.9327,2],['마포',37.5444,126.9491,4],['공덕',37.5428,126.9522,2],['애오개',37.5505,126.9573,2],['충정로',37.5598,126.9668,2],['서대문',37.5699,126.9666,2],['광화문',37.5716,126.9769,2],['종로3가',37.5706,126.9918,2],['을지로4가',37.5657,126.9981,2],['동대문역사문화공원',37.5650,127.0096,2],['청구',37.5633,127.0226,2],['신금호',37.5556,127.0266,2],['행당',37.5533,127.0349,2],['왕십리',37.5614,127.0379,2],['마장',37.5634,127.0522,2],['답십리',37.5641,127.0580,2],['장한평',37.5641,127.0716,2],['군자',37.5574,127.0795,2],['아차산',37.5549,127.0930,2],['광나루',37.5481,127.1091,3],['천호',37.5386,127.1237,3],['강동',37.5297,127.1279,2],['둔촌동',37.5211,127.1346,3],['올림픽공원',37.5213,127.1218,2],['방이',37.5177,127.1261,2],['오금',37.5025,127.1318,3] ],
+  '6':[ ['응암',37.5985,126.9136],['역촌',37.6031,126.9243,2],['불광',37.6105,126.9296,2],['독바위',37.6155,126.9338,2],['연신내',37.6191,126.9200,2],['구산',37.6166,126.9139,2],['새절',37.5997,126.9027,3],['증산',37.5790,126.9005,3],['디지털미디어시티',37.5756,126.8916,2],['망원',37.5556,126.9098,4],['합정',37.5497,126.9143,2],['상수',37.5479,126.9229,2],['광흥창',37.5459,126.9328,2],['대흥',37.5449,126.9437,2],['공덕',37.5428,126.9522,2],['효창공원앞',37.5393,126.9610,2],['삼각지',37.5371,126.9720,2],['녹사평',37.5349,126.9826,2],['이태원',37.5346,126.9947,2],['한강진',37.5309,127.0044,2],['버티고개',37.5449,127.0069,3],['약수',37.5533,127.0082,2],['청구',37.5633,127.0226,3],['신당',37.5660,127.0188,2],['동묘앞',37.5712,127.0166,2],['창신',37.5792,127.0173,2],['보문',37.5813,127.0197,2],['안암',37.5849,127.0290,2],['고려대',37.5897,127.0320,2],['월곡',37.6020,127.0349,3],['상월곡',37.6086,127.0398,2],['돌곶이',37.6143,127.0540,2],['석계',37.6143,127.0658,2],['태릉입구',37.6178,127.0836,3],['화랑대',37.6247,127.0961,2],['봉화산',37.6278,127.1045,2],['신내',37.6271,127.1176,2] ],
+  '7':[ ['장암',37.7010,127.0616],['도봉산',37.6893,127.0438,3],['수락산',37.6755,127.0500,3],['마들',37.6636,127.0626,3],['노원',37.6554,127.0564,2],['중계',37.6476,127.0688,2],['하계',37.6409,127.0688,2],['공릉',37.6295,127.0836,3],['태릉입구',37.6178,127.0836,3],['먹골',37.6069,127.0774,3],['중화',37.5985,127.0740,2],['상봉',37.5939,127.0871,2],['면목',37.5837,127.0909,2],['사가정',37.5759,127.0912,2],['용마산',37.5681,127.0876,2],['중곡',37.5609,127.0834,2],['군자',37.5574,127.0795,2],['어린이대공원',37.5498,127.0750,2],['건대입구',37.5401,127.0699,2],['뚝섬유원지',37.5306,127.0729,2],['청담',37.5270,127.0467,4],['강남구청',37.5172,127.0444,2],['학동',37.5099,127.0444,2],['논현',37.5117,127.0267,3],['반포',37.5050,127.0103,3],['고속터미널',37.5046,127.0047,2],['내방',37.4977,126.9978,2],['이수',37.4859,126.9819,3],['남성',37.4817,126.9801,2],['숭실대입구',37.4944,126.9622,3],['상도',37.4990,126.9540,2],['장승배기',37.5033,126.9402,2],['신대방삼거리',37.4967,126.9216,3],['보라매',37.4936,126.9218,2],['신풍',37.4981,126.9096,2],['대림',37.4931,126.8945,2],['남구로',37.4862,126.8877,2],['가산디지털단지',37.4814,126.8826,2],['철산',37.4819,126.8556,4],['광명사거리',37.4744,126.8657,2],['천왕',37.4703,126.8515,2],['온수',37.4872,126.8179,4] ],
+  '8':[ ['별내별가람',37.6411,127.1462],['다산',37.6066,127.1397,5],['구리',37.5995,127.1351,2],['토평',37.5816,127.1545,3],['암사',37.5533,127.1338,4],['천호',37.5386,127.1237,3],['강동구청',37.5298,127.1239,2],['몽촌토성',37.5166,127.1115,3],['잠실',37.5133,127.1001,2],['석촌',37.5019,127.1063,3],['송파',37.4987,127.1170,2],['가락시장',37.4930,127.1174,2],['문정',37.4893,127.1268,2],['장지',37.4842,127.1267,2],['복정',37.4791,127.1267,2],['남위례',37.4730,127.1267,2],['산성',37.4650,127.1393,3],['남한산성입구',37.4637,127.1530,2],['단대오거리',37.4559,127.1579,2],['신흥',37.4424,127.1548,2],['수진',37.4348,127.1516,2],['모란',37.4295,127.1281,3] ],
+  '9':[ ['개화',37.5688,126.7978],['김포공항',37.5618,126.8015,2],['공항시장',37.5589,126.8095,2],['신방화',37.5575,126.8175,2],['마곡나루',37.5589,126.8300,2],['양천향교',37.5481,126.8444,3],['가양',37.5618,126.8542,2],['증미',37.5555,126.8655,2],['등촌',37.5518,126.8739,2],['염창',37.5467,126.8832,2],['신목동',37.5333,126.8749,3],['선유도',37.5294,126.8981,3],['당산',37.5334,126.9000,2],['국회의사당',37.5289,126.9179,3],['여의도',37.5217,126.9243,2],['샛강',37.5152,126.9328,2],['노량진',37.5135,126.9426,2],['노들',37.5108,126.9534,2],['흑석',37.5086,126.9629,2],['동작',37.5108,126.9813,3],['구반포',37.5068,126.9921,2],['신반포',37.5063,127.0008,2],['고속터미널',37.5046,127.0047,2],['사평',37.5038,127.0169,3],['신논현',37.5048,127.0249,2],['언주',37.5080,127.0379,3],['선정릉',37.5079,127.0491,2],['삼성중앙',37.5079,127.0581,2],['봉은사',37.5149,127.0589,2],['종합운동장',37.5110,127.0733,3],['삼전',37.5066,127.0869,3],['석촌고분',37.5052,127.0967,2],['석촌',37.5019,127.1063,2],['송파나루',37.5079,127.1116,2],['한성백제',37.5145,127.1210,3],['올림픽공원',37.5213,127.1218,2],['둔촌오륜',37.5208,127.1381,3],['중앙보훈병원',37.5258,127.1529,3] ],
+};
+
+const LINE_COLORS = {'1':'#0052A4','2':'#00A84D','3':'#EF7C1C','4':'#00A5DE','5':'#996CAC','6':'#CD7C2F','7':'#747F00','8':'#E6186C','9':'#BDB092'};
+const COLORS = ['#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#F7B731','#A29BFE','#FD9644'];
+const TRANSFER_MIN = 4; // 환승 소요시간(분)
+
+// ══════════════════════════════════════════════════════
+//  그래프 빌드
+// ══════════════════════════════════════════════════════
+const graph   = {};  // { 'station|line': [{to:'station|line', time, isTr}] }
+const stCoord = {};  // { stationName: {lat,lng} }
+const stLines = {};  // { stationName: Set<line> }
+
+(function buildGraph() {
+  const lineNums = Object.keys(LINES).filter(k => k !== '2_close');
+
+  lineNums.forEach(line => {
+    const stations = LINES[line];
+    stations.forEach(([name, lat, lng, t], i) => {
+      stCoord[name] = { lat, lng };
+      if (!stLines[name]) stLines[name] = new Set();
+      stLines[name].add(line);
+      const key = `${name}|${line}`;
+      if (!graph[key]) graph[key] = [];
+
+      if (i > 0) {
+        const [prevName] = stations[i - 1];
+        const time = t || 2;
+        const pkey = `${prevName}|${line}`;
+        if (!graph[pkey]) graph[pkey] = [];
+        graph[key].push({ to: pkey, time });
+        graph[pkey].push({ to: key, time });
+      }
+    });
+  });
+
+  // 2호선 순환 닫기 (충정로 ↔ 시청)
+  const a = '충정로|2', b = '시청|2';
+  if (!graph[a]) graph[a] = [];
+  if (!graph[b]) graph[b] = [];
+  graph[a].push({ to: b, time: 2 });
+  graph[b].push({ to: a, time: 2 });
+
+  // 환승 엣지 생성 (같은 역, 다른 노선)
+  Object.entries(stLines).forEach(([name, lines]) => {
+    const arr = [...lines];
+    for (let i = 0; i < arr.length; i++) {
+      for (let j = i + 1; j < arr.length; j++) {
+        const ka = `${name}|${arr[i]}`, kb = `${name}|${arr[j]}`;
+        if (!graph[ka]) graph[ka] = [];
+        if (!graph[kb]) graph[kb] = [];
+        graph[ka].push({ to: kb, time: TRANSFER_MIN, isTr: true });
+        graph[kb].push({ to: ka, time: TRANSFER_MIN, isTr: true });
+      }
+    }
+  });
+})();
+
+// ══════════════════════════════════════════════════════
+//  다익스트라
+// ══════════════════════════════════════════════════════
+function dijkstra(startName, endName) {
+  if (!stLines[startName] || !stLines[endName]) return null;
+
+  const dist = {};
+  const trCount = {};
+  const visited = new Set();
+
+  // 단순 우선순위 큐 (배열 + sort)
+  const pq = []; // [time, transfers, key]
+
+  for (const line of stLines[startName]) {
+    const k = `${startName}|${line}`;
+    dist[k] = 0;
+    trCount[k] = 0;
+    pq.push([0, 0, k]);
+  }
+
+  while (pq.length) {
+    pq.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    const [d, tr, cur] = pq.shift();
+    if (visited.has(cur)) continue;
+    visited.add(cur);
+
+    const [curSt] = cur.split('|');
+    if (curSt === endName) return { time: d, transfers: tr };
+
+    for (const edge of (graph[cur] || [])) {
+      const nd = d + edge.time;
+      const ntr = tr + (edge.isTr ? 1 : 0);
+      if (nd < (dist[edge.to] ?? Infinity)) {
+        dist[edge.to] = nd;
+        trCount[edge.to] = ntr;
+        pq.push([nd, ntr, edge.to]);
+      }
+    }
+  }
+  return null;
+}
+
+// ══════════════════════════════════════════════════════
+//  가장 가까운 역 찾기
+// ══════════════════════════════════════════════════════
+function haversine(la1, lo1, la2, lo2) {
+  const R = 6371;
+  const dLa = (la2 - la1) * Math.PI / 180;
+  const dLo = (lo2 - lo1) * Math.PI / 180;
+  const a = Math.sin(dLa/2)**2 + Math.cos(la1*Math.PI/180)*Math.cos(la2*Math.PI/180)*Math.sin(dLo/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function nearestStation(lat, lng) {
+  let best = null, bestD = Infinity;
+  for (const [name, c] of Object.entries(stCoord)) {
+    const d = haversine(lat, lng, c.lat, c.lng);
+    if (d < bestD) { bestD = d; best = name; }
+  }
+  return best; // 도보시간 포함 않음 (간단화)
+}
+
+// ══════════════════════════════════════════════════════
+//  후보 약속장소 (주요 환승역)
+// ══════════════════════════════════════════════════════
+const CANDIDATES = [
+  {n:'서울역',     lines:['1','4']}, {n:'시청',       lines:['1','2']},
+  {n:'종각',       lines:['1']},     {n:'종로3가',    lines:['1','3','5']},
+  {n:'동대문',     lines:['1','4']}, {n:'동대문역사문화공원',lines:['2','4','5']},
+  {n:'홍대입구',   lines:['2']},     {n:'합정',       lines:['2','6']},
+  {n:'신촌',       lines:['2']},     {n:'이대',       lines:['2']},
+  {n:'강남',       lines:['2']},     {n:'역삼',       lines:['2']},
+  {n:'삼성',       lines:['2']},     {n:'선릉',       lines:['2']},
+  {n:'잠실',       lines:['2','8']}, {n:'건대입구',   lines:['2','7']},
+  {n:'강변',       lines:['2']},     {n:'왕십리',     lines:['2','5']},
+  {n:'신림',       lines:['2']},     {n:'구로디지털단지',lines:['2']},
+  {n:'사당',       lines:['2','4']}, {n:'신도림',     lines:['1','2']},
+  {n:'당산',       lines:['2','9']}, {n:'교대',       lines:['2','3']},
+  {n:'신사',       lines:['3']},     {n:'압구정',     lines:['3']},
+  {n:'고속터미널', lines:['3','7','9']},{n:'양재',    lines:['3']},
+  {n:'충무로',     lines:['3','4']}, {n:'혜화',       lines:['4']},
+  {n:'명동',       lines:['4']},     {n:'이촌',       lines:['4']},
+  {n:'이수',       lines:['4','7']}, {n:'노원',       lines:['4','7']},
+  {n:'창동',       lines:['1','4']}, {n:'광화문',     lines:['5']},
+  {n:'여의도',     lines:['5','9']}, {n:'마포',       lines:['5']},
+  {n:'공덕',       lines:['5','6']}, {n:'이태원',     lines:['6']},
+  {n:'상수',       lines:['6']},     {n:'강남구청',   lines:['7']},
+  {n:'보라매',     lines:['7']},     {n:'신논현',     lines:['9']},
+  {n:'가양',       lines:['9']},     {n:'올림픽공원', lines:['5','9']},
+  {n:'종합운동장', lines:['2','9']},
+].filter(c => stCoord[c.n]); // 그래프에 있는 역만
+
+// ══════════════════════════════════════════════════════
+//  앱 상태
+// ══════════════════════════════════════════════════════
+let kakaoMap, ps, participants = [], overlays = [], selectedLoc = null, searchTimer;
+
+// ══════════════════════════════════════════════════════
+//  카카오맵 초기화
+// ══════════════════════════════════════════════════════
+// 버튼은 카카오와 무관하게 즉시 바인딩
+document.addEventListener('DOMContentLoaded', bindEvents);
+
+// 카카오 지도 + 장소검색 SDK 로딩 완료 후 초기화
+if (typeof kakao !== 'undefined') {
+  kakao.maps.load(() => {
+    kakaoMap = new kakao.maps.Map(document.getElementById('map'), {
+      center: new kakao.maps.LatLng(37.5326, 126.9965),
+      level: 8,
+    });
+    ps = new kakao.maps.services.Places();
+  });
+}
+
+function bindEvents() {
+  document.getElementById('btn-add').addEventListener('click', showForm);
+  document.getElementById('btn-cancel').addEventListener('click', hideForm);
+  document.getElementById('btn-ok').addEventListener('click', confirmAdd);
+  document.getElementById('btn-find').addEventListener('click', findSpot);
+  document.getElementById('p-search').addEventListener('input', e => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => doSearch(e.target.value), 350);
+  });
+}
+
+// ══════════════════════════════════════════════════════
+//  참여자 추가 폼
+// ══════════════════════════════════════════════════════
+function showForm() {
+  selectedLoc = null;
+  document.getElementById('p-name').value = '';
+  document.getElementById('p-search').value = '';
+  document.getElementById('sr').innerHTML = '';
+  document.getElementById('sr').classList.remove('on');
+  document.getElementById('add-form').style.display = 'flex';
+  document.getElementById('btn-add').style.display = 'none';
+}
+function hideForm() {
+  document.getElementById('add-form').style.display = 'none';
+  document.getElementById('btn-add').style.display = 'block';
+}
+
+// ══════════════════════════════════════════════════════
+//  카카오 장소 검색
+// ══════════════════════════════════════════════════════
+function doSearch(kw) {
+  const el = document.getElementById('sr');
+  if (!kw.trim()) { el.classList.remove('on'); return; }
+  ps.keywordSearch(kw, (data, status) => {
+    el.innerHTML = '';
+    if (status !== kakao.maps.services.Status.OK || !data.length) {
+      el.innerHTML = '<div class="sri" style="color:#8e8e93">결과 없음</div>';
+      el.classList.add('on');
+      return;
+    }
+    data.slice(0, 7).forEach(p => {
+      const div = document.createElement('div');
+      div.className = 'sri';
+      div.innerHTML = `${p.place_name}<small>${p.road_address_name || p.address_name}</small>`;
+      div.addEventListener('click', () => {
+        selectedLoc = { name: p.place_name, lat: parseFloat(p.y), lng: parseFloat(p.x) };
+        document.getElementById('p-search').value = p.place_name;
+        el.classList.remove('on');
+      });
+      el.appendChild(div);
+    });
+    el.classList.add('on');
+  }, { size: 7 });
+}
+
+function confirmAdd() {
+  if (!selectedLoc) { alert('출발지를 검색해서 선택해주세요.'); return; }
+  const name = document.getElementById('p-name').value.trim() || `참여자 ${participants.length + 1}`;
+  participants.push({ id: Date.now(), name, loc: selectedLoc });
+  renderParticipants();
+  addPMarker(participants[participants.length - 1]);
+  hideForm();
+  document.getElementById('btn-find').disabled = participants.length < 2;
+}
+
+function removePart(id) {
+  participants = participants.filter(p => p.id !== id);
+  renderParticipants();
+  refreshPMarkers();
+  document.getElementById('btn-find').disabled = participants.length < 2;
+}
+
+function renderParticipants() {
+  const el = document.getElementById('p-list');
+  if (!participants.length) { el.innerHTML = '<div class="empty">아래 버튼으로 참여자를 추가하세요</div>'; return; }
+  el.innerHTML = participants.map((p, i) => `
+    <div class="p-item">
+      <div class="p-dot" style="background:${COLORS[i%COLORS.length]}">${p.name[0]}</div>
+      <div class="p-info">
+        <div class="p-name">${p.name}</div>
+        <div class="p-loc">📍 ${p.loc.name}</div>
+      </div>
+      <button class="btn-x" onclick="removePart(${p.id})">×</button>
+    </div>`).join('');
+}
+
+// ══════════════════════════════════════════════════════
+//  지도 마커 (카카오 CustomOverlay)
+// ══════════════════════════════════════════════════════
+function makeOverlay(lat, lng, html) {
+  const ov = new kakao.maps.CustomOverlay({
+    position: new kakao.maps.LatLng(lat, lng),
+    content: html,
+    yAnchor: 0.5,
+    xAnchor: 0.5,
+  });
+  ov.setMap(kakaoMap);
+  return ov;
+}
+
+function addPMarker(p) {
+  const i = participants.findIndex(x => x.id === p.id);
+  const c = COLORS[i % COLORS.length];
+  const ov = makeOverlay(p.loc.lat, p.loc.lng,
+    `<div class="p-marker" style="background:${c}">${p.name[0]}</div>`);
+  overlays.push({ id: p.id, ov });
+}
+
+function refreshPMarkers() {
+  overlays.forEach(o => o.ov.setMap(null));
+  overlays = [];
+  participants.forEach(p => addPMarker(p));
+}
+
+function clearResultOverlays() {
+  overlays = overlays.filter(o => {
+    if (o.isResult) { o.ov.setMap(null); return false; }
+    return true;
+  });
+}
+
+// ══════════════════════════════════════════════════════
+//  핵심: 최적 장소 탐색
+// ══════════════════════════════════════════════════════
+async function findSpot() {
+  if (participants.length < 2) return;
+  document.getElementById('btn-find').disabled = true;
+  document.getElementById('results').innerHTML = '';
+
+  // 지리 중심 계산 → 반경 필터
+  const clat = participants.reduce((s,p)=>s+p.loc.lat,0)/participants.length;
+  const clng = participants.reduce((s,p)=>s+p.loc.lng,0)/participants.length;
+  const maxR = Math.max(...participants.map(p=>haversine(clat,clng,p.loc.lat,p.loc.lng)));
+  const radius = Math.min(maxR * 2 + 8, 35);
+  const cands = CANDIDATES.filter(c => haversine(clat,clng,stCoord[c.n].lat,stCoord[c.n].lng) <= radius);
+
+  setStatus(`후보 ${cands.length}개역 계산 중…`);
+
+  const scored = [];
+  for (const c of cands) {
+    const routes = participants.map(p => {
+      const ns = nearestStation(p.loc.lat, p.loc.lng);
+      return dijkstra(ns, c.n);
+    });
+    if (routes.some(r => !r)) continue;
+    const times = routes.map(r => r.time);
+    const trs   = routes.map(r => r.transfers);
+    scored.push({
+      cand: c,
+      routes: routes.map((r,i)=>({p:participants[i],...r})),
+      maxTime: Math.max(...times),
+      sumTime: times.reduce((a,b)=>a+b,0),
+      maxTr:   Math.max(...trs),
+      sumTr:   trs.reduce((a,b)=>a+b,0),
+    });
+  }
+
+  // 정렬: 1순위 최대이동시간 ↑, 2순위 환승합 ↑
+  scored.sort((a,b)=>a.maxTime!==b.maxTime?a.maxTime-b.maxTime:a.sumTr-b.sumTr);
+
+  clearResultOverlays();
+  renderResults(scored.slice(0,10));
+  showOnMap(scored.slice(0,3));
+  setStatus('');
+  document.getElementById('btn-find').disabled = false;
+}
+
+// ══════════════════════════════════════════════════════
+//  결과 렌더링
+// ══════════════════════════════════════════════════════
+function renderResults(top) {
+  const el = document.getElementById('results');
+  if (!top.length) { el.innerHTML='<div class="empty">경로를 찾을 수 없습니다.<br>참여자 위치를 확인해주세요.</div>'; return; }
+
+  el.innerHTML = top.map((r,i)=>{
+    const lines = r.cand.lines.map(l=>`<span class="lb" style="background:${LINE_COLORS[l]||'#888'}">${l}호선</span>`).join('');
+    const details = r.routes.map((rt,j)=>`
+      <div class="dr">
+        <div class="dr-l"><div class="dd" style="background:${COLORS[j%COLORS.length]}"></div><span>${rt.p.name}</span></div>
+        <span>${rt.time}분 · 환승 ${rt.transfers}회</span>
+      </div>`).join('');
+    return `
+      <div class="rc" id="rc-${i}" onclick="selCard(${i},${stCoord[r.cand.n].lat},${stCoord[r.cand.n].lng})">
+        <div class="r-rank">${i===0?'🏆 최적 장소':`#${i+1}`}</div>
+        <div class="r-name">${r.cand.n}</div>
+        <div class="r-lines">${lines}</div>
+        <div class="r-stats">
+          <div class="stat"><span class="stat-l">최대 이동시간</span><span class="stat-v">${r.maxTime}분</span></div>
+          <div class="stat"><span class="stat-l">총 이동시간</span><span class="stat-v">${r.sumTime}분</span></div>
+          <div class="stat"><span class="stat-l">최대 환승</span><span class="stat-v">${r.maxTr}회</span></div>
+        </div>
+        <div class="r-detail">${details}</div>
+      </div>`;
+  }).join('');
+}
+
+function selCard(i, lat, lng) {
+  document.querySelectorAll('.rc').forEach(e=>e.classList.remove('sel'));
+  document.getElementById(`rc-${i}`).classList.add('sel');
+  kakaoMap.setCenter(new kakao.maps.LatLng(lat, lng));
+  kakaoMap.setLevel(6);
+}
+
+function showOnMap(top) {
+  top.forEach((r,i)=>{
+    const c = stCoord[r.cand.n];
+    const size = i===0?40:32;
+    const bg   = i===0?'#0071e3':'#555';
+    const label= i===0?'★':i+1;
+    const ov = makeOverlay(c.lat, c.lng,
+      `<div class="r-marker" style="width:${size}px;height:${size}px;background:${bg};font-size:${i===0?16:13}px">${label}</div>`);
+    overlays.push({ id:`res-${i}`, ov, isResult:true });
+  });
+
+  // 지도 범위 조정
+  const bounds = new kakao.maps.LatLngBounds();
+  participants.forEach(p=>bounds.extend(new kakao.maps.LatLng(p.loc.lat,p.loc.lng)));
+  top.forEach(r=>{ const c=stCoord[r.cand.n]; bounds.extend(new kakao.maps.LatLng(c.lat,c.lng)); });
+  kakaoMap.setBounds(bounds, 60);
+}
+
+function setStatus(msg){ document.getElementById('status').textContent=msg; }
+</script>
+</body>
+</html>
