@@ -152,23 +152,52 @@ const graph={},stCoord={},stLines={};
   });
 })();
 
-// ── 다익스트라 ───────────────────────────────────────
+// ── 다익스트라 (경로 추적 포함) ──────────────────────
 function dijkstra(start,end){
   if(!stLines[start]||!stLines[end])return null;
-  const dist={},visited=new Set(),pq=[];
-  for(const line of stLines[start]){const k=`${start}|${line}`;dist[k]=0;pq.push([0,0,k]);}
+  const dist={},prev={},visited=new Set(),pq=[];
+  for(const line of stLines[start]){const k=`${start}|${line}`;dist[k]=0;prev[k]=null;pq.push([0,0,k]);}
   while(pq.length){
     pq.sort((a,b)=>a[0]-b[0]||a[1]-b[1]);
     const[d,tr,cur]=pq.shift();
     if(visited.has(cur))continue;visited.add(cur);
     const[curSt]=cur.split('|');
-    if(curSt===end)return{time:d,transfers:tr};
+    if(curSt===end){
+      // 경로 재구성: 환승 지점만 추출
+      const segments=[];
+      let node=cur;
+      while(node){
+        const[st,line]=node.split('|');
+        if(!segments.length||segments[0].line!==line)
+          segments.unshift({station:st,line});
+        node=prev[node];
+      }
+      // 출발역은 첫 segment, 도착역은 마지막 segment로 정리
+      const route=[];
+      segments.forEach((seg,i)=>{
+        if(i===0) route.push({station:seg.station,line:seg.line,type:'start'});
+        else if(i===segments.length-1) route.push({station:seg.station,line:seg.line,type:'end'});
+        else route.push({station:seg.station,line:seg.line,type:'transfer'});
+      });
+      return{time:d,transfers:tr,route};
+    }
     for(const e of(graph[cur]||[])){
       const nd=d+e.time,ntr=tr+(e.isTr?1:0);
-      if(nd<(dist[e.to]??Infinity)){dist[e.to]=nd;pq.push([nd,ntr,e.to]);}
+      if(nd<(dist[e.to]??Infinity)){dist[e.to]=nd;prev[e.to]=cur;pq.push([nd,ntr,e.to]);}
     }
   }
   return null;
+}
+
+// 경로를 HTML로 변환
+function routeToHtml(route){
+  if(!route||route.length===0)return '';
+  return route.map((seg,i)=>{
+    const c=LINE_COLORS[seg.line]||'#888';
+    const arrow=i>0?`<span style="color:#c7c7cc;margin:0 4px">→</span>`:'';
+    const badge=`<span style="background:${c};color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-right:4px">${seg.line}호선</span>`;
+    return `${arrow}${badge}<span style="font-size:12px;font-weight:${seg.type!=='transfer'?'600':'400'}">${seg.station}</span>`;
+  }).join('');
 }
 
 function haversine(la1,lo1,la2,lo2){
@@ -350,8 +379,9 @@ function renderResults(top){
   el.innerHTML=top.map((r,i)=>{
     const lines=r.cand.lines.map(l=>`<span class="lb" style="background:${LINE_COLORS[l]||'#888'}">${l}호선</span>`).join('');
     const details=r.routes.map((rt,j)=>`
-      <div class="dr"><div class="dr-l"><div class="dd" style="background:${COLORS[j%COLORS.length]}"></div><span>${rt.p.name}</span></div>
-      <span>${rt.time}분 · 환승 ${rt.transfers}회</span></div>`).join('');
+      <div class="dr"><div class="dr-l"><div class="dd" style="background:${COLORS[j%COLORS.length]}"></div><span style="font-weight:600">${rt.p.name}</span></div>
+      <span>${rt.time}분 · 환승 ${rt.transfers}회</span></div>
+      <div style="padding:4px 0 6px 14px;line-height:1.8">${routeToHtml(rt.route)}</div>`).join('');
     return`<div class="rc" id="rc-${i}" onclick="selCard(${i},${stCoord[r.cand.n].lat},${stCoord[r.cand.n].lng})">
       <div class="r-rank">${i===0?'🏆 최적 장소':`#${i+1}`}</div>
       <div class="r-name">${r.cand.n}역</div>
