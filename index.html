@@ -201,7 +201,13 @@ function dijkstra(start,end){
           route.push({station:st,line,type:'end'});
         }
       }
-      return{time:d,transfers:tr,route};
+      // 전체 경유역 (중복 제거: 환승시 같은 역 2번 나오는 것 제거)
+      const stationPath=[];
+      pathNodes.forEach((node,i)=>{
+        const[st]=node.split('|');
+        if(i===0||pathNodes[i-1].split('|')[0]!==st)stationPath.push(st);
+      });
+      return{time:d,transfers:tr,route,stationPath};
     }
     for(const e of(graph[cur]||[])){
       const nd=d+e.time,ntr=tr+(e.isTr?1:0);
@@ -231,14 +237,13 @@ function haversine(la1,lo1,la2,lo2){
 }
 
 function nearestStation(lat,lng,hint){
-  // 역 이름으로 직접 매칭 시도 (예: "한성백제역" → "한성백제")
   if(hint){
     const clean=hint.replace(/역$|역\s/,'').replace(/\s/g,'');
+    // 1. 완전 일치
     if(stCoord[clean])return clean;
-    // 부분 매칭
-    for(const name of Object.keys(stCoord)){
-      if(clean===name||clean.startsWith(name)||name.startsWith(clean))return name;
-    }
+    // 2. 부분 매칭 중 가장 긴 이름 우선 (마포구청 > 마포)
+    const matches=Object.keys(stCoord).filter(n=>clean.startsWith(n)||n.startsWith(clean));
+    if(matches.length>0){matches.sort((a,b)=>b.length-a.length);return matches[0];}
   }
   let best=null,bestD=Infinity;
   for(const[name,c]of Object.entries(stCoord)){
@@ -392,33 +397,44 @@ function drawRoutesOnMap(result){
   clearRoutePolylines();
   result.routes.forEach((rt,j)=>{
     const color=COLORS[j%COLORS.length];
-    const path=[];
-    // 참여자 실제 위치 → 출발역 (점선)
-    path.push(new kakao.maps.LatLng(rt.p.loc.lat,rt.p.loc.lng));
-    rt.route.forEach(seg=>{
-      const c=stCoord[seg.station];
-      if(c)path.push(new kakao.maps.LatLng(c.lat,c.lng));
-    });
-    // 참여자위치→출발역 점선
-    const dashed=new kakao.maps.Polyline({
-      path:path.slice(0,2),strokeWeight:2,strokeColor:color,
-      strokeOpacity:0.5,strokeStyle:'dashed'
-    });
-    dashed.setMap(kakaoMap);routePolylines.push(dashed);
-    // 출발역→도착역 실선
-    if(path.length>2){
-      const solid=new kakao.maps.Polyline({
-        path:path.slice(1),strokeWeight:4,strokeColor:color,
-        strokeOpacity:0.85,strokeStyle:'solid'
+    // 참여자 위치 → 출발역 (점선)
+    const firstSt=rt.stationPath&&rt.stationPath[0];
+    if(firstSt&&stCoord[firstSt]){
+      const dashed=new kakao.maps.Polyline({
+        path:[new kakao.maps.LatLng(rt.p.loc.lat,rt.p.loc.lng),
+              new kakao.maps.LatLng(stCoord[firstSt].lat,stCoord[firstSt].lng)],
+        strokeWeight:2,strokeColor:color,strokeOpacity:0.5,strokeStyle:'dashed'
       });
-      solid.setMap(kakaoMap);routePolylines.push(solid);
+      dashed.setMap(kakaoMap);routePolylines.push(dashed);
     }
-    // 환승역 마커
-    rt.route.filter(s=>s.type==='transfer').forEach(seg=>{
-      const c=stCoord[seg.station];
-      if(!c)return;
+    // 실제 지하철 경로 (stationPath 전체 역 연결)
+    if(rt.stationPath&&rt.stationPath.length>1){
+      // 노선 색 변경 지점에서 선 분리 (환승 구간별로 다른 색)
+      let segStart=0;
+      for(let i=1;i<=rt.stationPath.length;i++){
+        const isLast=i===rt.stationPath.length;
+        // 환승 지점 찾기 (route의 transfer역)
+        const isTransfer=!isLast&&rt.route&&rt.route.some(r=>r.type==='transfer'&&r.station===rt.stationPath[i]);
+        if(isLast||isTransfer){
+          const segStations=rt.stationPath.slice(segStart,i);
+          const coords=segStations.map(s=>stCoord[s]).filter(Boolean)
+            .map(c=>new kakao.maps.LatLng(c.lat,c.lng));
+          if(coords.length>1){
+            const solid=new kakao.maps.Polyline({
+              path:coords,strokeWeight:5,strokeColor:color,
+              strokeOpacity:0.85,strokeStyle:'solid'
+            });
+            solid.setMap(kakaoMap);routePolylines.push(solid);
+          }
+          segStart=i;
+        }
+      }
+    }
+    // 환승역 흰 원 표시
+    if(rt.route)rt.route.filter(s=>s.type==='transfer').forEach(seg=>{
+      const c=stCoord[seg.station];if(!c)return;
       const ov=makeOverlay(c.lat,c.lng,
-        `<div style="background:#fff;border:2px solid ${color};border-radius:50%;width:10px;height:10px"></div>`);
+        `<div style="background:#fff;border:2px solid ${color};border-radius:50%;width:10px;height:10px;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>`);
       routePolylines.push(ov);
     });
   });
