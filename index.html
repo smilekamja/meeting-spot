@@ -503,11 +503,7 @@ function selCard(i,lat,lng){
   const wasSelected=card.classList.contains('sel');
   if(wasSelected){card.classList.remove('sel');clearRoutePolylines();return;}
   card.classList.add('sel');
-  if(kakaoMap){
-    kakaoMap.setCenter(new kakao.maps.LatLng(lat,lng));
-    kakaoMap.setLevel(7);
-    if(currentResults[i])drawRoutesOnMap(currentResults[i]);
-  }
+  if(kakaoMap){kakaoMap.setCenter(new kakao.maps.LatLng(lat,lng));kakaoMap.setLevel(7);}
 }
 function showOnMap(top){
   top.forEach((r,i)=>{
