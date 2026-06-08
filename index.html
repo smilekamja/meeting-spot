@@ -163,22 +163,22 @@ function dijkstra(start,end){
     if(visited.has(cur))continue;visited.add(cur);
     const[curSt]=cur.split('|');
     if(curSt===end){
-      // 경로 재구성: 환승 지점만 추출
-      const segments=[];
+      // 경로 재구성: 전체 경로 역방향 수집 후 순방향으로 변환
+      const pathNodes=[];
       let node=cur;
-      while(node){
-        const[st,line]=node.split('|');
-        if(!segments.length||segments[0].line!==line)
-          segments.unshift({station:st,line});
-        node=prev[node];
-      }
-      // 출발역은 첫 segment, 도착역은 마지막 segment로 정리
+      while(node){pathNodes.unshift(node);node=prev[node];}
       const route=[];
-      segments.forEach((seg,i)=>{
-        if(i===0) route.push({station:seg.station,line:seg.line,type:'start'});
-        else if(i===segments.length-1) route.push({station:seg.station,line:seg.line,type:'end'});
-        else route.push({station:seg.station,line:seg.line,type:'transfer'});
-      });
+      for(let i=0;i<pathNodes.length;i++){
+        const[st,line]=pathNodes[i].split('|');
+        const prevLine=i>0?pathNodes[i-1].split('|')[1]:null;
+        if(i===0){
+          route.push({station:st,line,type:'start'});
+        } else if(line!==prevLine){
+          route.push({station:st,line,type:i===pathNodes.length-1?'end':'transfer'});
+        } else if(i===pathNodes.length-1){
+          route.push({station:st,line,type:'end'});
+        }
+      }
       return{time:d,transfers:tr,route};
     }
     for(const e of(graph[cur]||[])){
@@ -189,14 +189,16 @@ function dijkstra(start,end){
   return null;
 }
 
-// 경로를 HTML로 변환
+// 경로를 HTML로 변환 (출발역 → 환승역 → 도착역)
 function routeToHtml(route){
   if(!route||route.length===0)return '';
   return route.map((seg,i)=>{
     const c=LINE_COLORS[seg.line]||'#888';
-    const arrow=i>0?`<span style="color:#c7c7cc;margin:0 4px">→</span>`:'';
-    const badge=`<span style="background:${c};color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-right:4px">${seg.line}호선</span>`;
-    return `${arrow}${badge}<span style="font-size:12px;font-weight:${seg.type!=='transfer'?'600':'400'}">${seg.station}</span>`;
+    const arrow=i>0?`<span style="color:#c7c7cc;margin:0 5px">→</span>`:'';
+    const showBadge=seg.type==='start'||seg.type==='transfer';
+    const badge=showBadge?`<span style="background:${c};color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:8px;margin-right:3px">${seg.line}호선</span>`:'';
+    const weight=seg.type==='end'?'500':'700';
+    return `${arrow}${badge}<span style="font-size:12px;font-weight:${weight}">${seg.station}</span>`;
   }).join('');
 }
 
@@ -232,7 +234,7 @@ const CANDIDATES=[
 ].filter(c=>stCoord[c.n]);
 
 // ── 앱 상태 ─────────────────────────────────────────
-let kakaoMap,ps,participants=[],overlays=[],selectedLoc=null,searchTimer;
+let kakaoMap,ps,participants=[],overlays=[],routePolylines=[],currentResults=[],selectedLoc=null,searchTimer;
 
 // ── 버튼 이벤트: 카카오 로딩과 무관하게 즉시 바인딩 ──
 document.addEventListener('DOMContentLoaded',()=>{
@@ -343,6 +345,43 @@ function addPMarker(p){
 }
 function refreshPMarkers(){overlays.forEach(o=>o.ov.setMap(null));overlays=[];participants.forEach(p=>addPMarker(p));}
 function clearResultOverlays(){overlays=overlays.filter(o=>{if(o.isResult){o.ov.setMap(null);return false;}return true;});}
+function clearRoutePolylines(){routePolylines.forEach(p=>{try{p.setMap(null);}catch(e){}});routePolylines=[];}
+function drawRoutesOnMap(result){
+  if(!kakaoMap)return;
+  clearRoutePolylines();
+  result.routes.forEach((rt,j)=>{
+    const color=COLORS[j%COLORS.length];
+    const path=[];
+    // 참여자 실제 위치 → 출발역 (점선)
+    path.push(new kakao.maps.LatLng(rt.p.loc.lat,rt.p.loc.lng));
+    rt.route.forEach(seg=>{
+      const c=stCoord[seg.station];
+      if(c)path.push(new kakao.maps.LatLng(c.lat,c.lng));
+    });
+    // 참여자위치→출발역 점선
+    const dashed=new kakao.maps.Polyline({
+      path:path.slice(0,2),strokeWeight:2,strokeColor:color,
+      strokeOpacity:0.5,strokeStyle:'dashed'
+    });
+    dashed.setMap(kakaoMap);routePolylines.push(dashed);
+    // 출발역→도착역 실선
+    if(path.length>2){
+      const solid=new kakao.maps.Polyline({
+        path:path.slice(1),strokeWeight:4,strokeColor:color,
+        strokeOpacity:0.85,strokeStyle:'solid'
+      });
+      solid.setMap(kakaoMap);routePolylines.push(solid);
+    }
+    // 환승역 마커
+    rt.route.filter(s=>s.type==='transfer').forEach(seg=>{
+      const c=stCoord[seg.station];
+      if(!c)return;
+      const ov=makeOverlay(c.lat,c.lng,
+        `<div style="background:#fff;border:2px solid ${color};border-radius:50%;width:10px;height:10px"></div>`);
+      routePolylines.push(ov);
+    });
+  });
+}
 
 // ── 최적 장소 탐색 ───────────────────────────────────
 function findSpot(){
@@ -366,7 +405,8 @@ function findSpot(){
   }
   scored.sort((a,b)=>a.maxTime!==b.maxTime?a.maxTime-b.maxTime:a.sumTr-b.sumTr);
   const top=scored.slice(0,10);
-  if(kakaoMap)clearResultOverlays();
+  if(kakaoMap){clearResultOverlays();clearRoutePolylines();}
+  currentResults=top;
   renderResults(top);
   if(kakaoMap)showOnMap(top.slice(0,3));
   setStatus('');document.getElementById('btn-find').disabled=false;
@@ -396,8 +436,15 @@ function renderResults(top){
 }
 function selCard(i,lat,lng){
   document.querySelectorAll('.rc').forEach(e=>e.classList.remove('sel'));
-  document.getElementById(`rc-${i}`).classList.add('sel');
-  if(kakaoMap){kakaoMap.setCenter(new kakao.maps.LatLng(lat,lng));kakaoMap.setLevel(6);}
+  const card=document.getElementById(`rc-${i}`);
+  const wasSelected=card.classList.contains('sel');
+  if(wasSelected){card.classList.remove('sel');clearRoutePolylines();return;}
+  card.classList.add('sel');
+  if(kakaoMap){
+    kakaoMap.setCenter(new kakao.maps.LatLng(lat,lng));
+    kakaoMap.setLevel(7);
+    if(currentResults[i])drawRoutesOnMap(currentResults[i]);
+  }
 }
 function showOnMap(top){
   top.forEach((r,i)=>{
